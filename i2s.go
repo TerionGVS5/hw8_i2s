@@ -18,11 +18,20 @@ func i2s(data interface{}, out interface{}) error {
 	switch reflect.TypeOf(data).Kind() {
 	case reflect.Map:
 		dataMapOrSlice = reflect.ValueOf(data)
+	case reflect.Slice:
+		dataMapOrSlice = reflect.ValueOf(data)
 	default:
 		// got map from recursion
 		dataMapOrSlice = data.(reflect.Value).Elem()
 	}
-	if outStructOrSlice.Kind() == reflect.Struct {
+	switch outStructOrSlice.Kind() {
+	case reflect.Struct:
+		if !outStructOrSlice.CanSet() {
+			return fmt.Errorf("can't set error")
+		}
+		if dataMapOrSlice.Kind() != reflect.Map {
+			return fmt.Errorf("wait map got - not map")
+		}
 		iter := dataMapOrSlice.MapRange()
 		for iter.Next() {
 			keyData := iter.Key()
@@ -57,9 +66,34 @@ func i2s(data interface{}, out interface{}) error {
 				if err != nil {
 					return err
 				}
+			case reflect.Slice:
+				if valueData.Elem().Kind() != reflect.Slice {
+					return fmt.Errorf("error when value to Slice")
+				}
+				typeForSlice := currStructField.Type().Elem()
+				for indexSlice := 0; indexSlice < valueData.Elem().Len(); indexSlice++ {
+					tmpStruct := reflect.New(typeForSlice)
+					err := i2s(valueData.Elem().Index(indexSlice), tmpStruct.Elem())
+					if err != nil {
+						return err
+					}
+					currStructField.Set(reflect.Append(currStructField, tmpStruct.Elem()))
+				}
 			}
 		}
+	case reflect.Slice:
+		if dataMapOrSlice.Kind() != reflect.Slice {
+			return fmt.Errorf("error when value to Slice")
+		}
+		typeForSlice := outStructOrSlice.Type().Elem()
+		for indexSlice := 0; indexSlice < dataMapOrSlice.Len(); indexSlice++ {
+			tmpStruct := reflect.New(typeForSlice)
+			err := i2s(dataMapOrSlice.Index(indexSlice), tmpStruct.Elem())
+			if err != nil {
+				return err
+			}
+			outStructOrSlice.Set(reflect.Append(outStructOrSlice, tmpStruct.Elem()))
+		}
 	}
-
 	return nil
 }
