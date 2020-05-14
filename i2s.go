@@ -6,8 +6,22 @@ import (
 )
 
 func i2s(data interface{}, out interface{}) error {
-	outStructOrSlice := reflect.Indirect(reflect.ValueOf(out))
-	dataMapOrSlice := reflect.ValueOf(data)
+	var dataMapOrSlice reflect.Value
+	var outStructOrSlice reflect.Value
+	switch reflect.Indirect(reflect.ValueOf(out)).Type().String() {
+	case "reflect.Value":
+		// got value from recursion
+		outStructOrSlice = out.(reflect.Value)
+	default:
+		outStructOrSlice = reflect.Indirect(reflect.ValueOf(out))
+	}
+	switch reflect.TypeOf(data).Kind() {
+	case reflect.Map:
+		dataMapOrSlice = reflect.ValueOf(data)
+	default:
+		// got map from recursion
+		dataMapOrSlice = data.(reflect.Value).Elem()
+	}
 	if outStructOrSlice.Kind() == reflect.Struct {
 		iter := dataMapOrSlice.MapRange()
 		for iter.Next() {
@@ -38,6 +52,11 @@ func i2s(data interface{}, out interface{}) error {
 					return fmt.Errorf("error when value to Float64")
 				}
 				currStructField.SetFloat(valueData.Elem().Float())
+			case reflect.Struct:
+				err := i2s(valueData, currStructField)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
